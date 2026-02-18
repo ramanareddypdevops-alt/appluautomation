@@ -325,3 +325,5 @@ alternate link: https://discord.gg/ykfDjRFB
 ---
 
 [back to the top](#linkedin-ai-auto-job-applier-)
+#   a u t o - a p p l i e r  
+ 

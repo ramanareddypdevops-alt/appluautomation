@@ -44,7 +44,9 @@ from config.settings import *
 from modules.open_chrome import *
 from modules.helpers import *
 from modules.clickers_and_finders import *
+from modules.clickers_and_finders import *
 from modules.validator import validate_config
+from modules.classifier import classify_job
 
 if use_AI:
     from modules.ai.openaiConnections import ai_create_openai_client, ai_extract_skills, ai_answer_question, ai_close_openai_client
@@ -248,7 +250,16 @@ def apply_filters() -> None:
         multi_sel_noWait(driver, commitments)
         if benefits or commitments: buffer(recommended_wait)
 
-        show_results_button: WebElement = driver.find_element(By.XPATH, '//button[contains(translate(@aria-label, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "apply current filters to show")]')
+        try:
+            show_results_button = driver.find_element(By.XPATH, '//button[contains(translate(@aria-label, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "apply current filters to show")]')
+        except:
+            try:
+                # Fallback 1: Common class for "Show results"
+                show_results_button = driver.find_element(By.CLASS_NAME, 'search-reusables__secondary-filters-show-results-button')
+            except:
+                 # Fallback 2: Text based "Show X results"
+                show_results_button = driver.find_element(By.XPATH, '//button[contains(text(), "Show") and contains(text(), "results")]')
+        
         show_results_button.click()
 
         global pause_after_filters
@@ -257,7 +268,7 @@ def apply_filters() -> None:
 
     except Exception as e:
         print_lg("Setting the preferences failed!")
-        pyautogui.confirm(f"Faced error while applying filters. Please make sure correct filters are selected, click on show results and click on any button of this dialog, I know it sucks. Can't turn off Pause after search when error occurs! ERROR: {e}", ["Doesn't look good, but Continue XD", "Look's good, Continue"])
+        pyautogui.confirm(f"Faced error while applying filters. Please make sure correct filters are selected, click on show results and click on any button of this dialog, I know it sucks. Can't turn off Pause after search when error occurs! ERROR: {e}", "Filter Error", ["Doesn't look good, but Continue XD", "Look's good, Continue"])
         # print_lg(e)
 
 
@@ -425,9 +436,39 @@ def get_job_description(
 
 # Function to upload resume
 def upload_resume(modal: WebElement, resume: str) -> tuple[bool, str]:
+    resume_name = os.path.basename(resume)
+    
+    # Check if file is empty
+    if os.path.exists(resume) and os.path.getsize(resume) == 0:
+        print_lg(f"Resume file {resume} is empty! Skipping upload.")
+        return False, "Empty Resume"
+
+    # Try to select existing resume
+    try:
+        # Search for resume by name in the modal
+        # Strategy 1: Look for the specific card container style used by LinkedIn
+        try:
+            # Avoid selecting resumes that are 0 B (empty)
+            xpath = f"//div[contains(@class, 'jobs-document-upload-redesign-card__container')][contains(., '{resume_name}') and not(contains(., '0 B'))]"
+            existing_resume = modal.find_element(By.XPATH, xpath)
+            existing_resume.click()
+            print_lg(f"Selected existing resume: {resume_name}")
+            return True, resume_name
+        except: pass
+
+        # Strategy 2: Look for any label containing the text
+        xpath = f"//label[contains(., '{resume_name}') and not(contains(., '0 B'))]"
+        existing_resume = modal.find_element(By.XPATH, xpath)
+        existing_resume.click()
+        print_lg(f"Selected existing resume by label: {resume_name}")
+        return True, resume_name
+    except: pass
+
+    # Upload new resume
     try:
         modal.find_element(By.NAME, "file").send_keys(os.path.abspath(resume))
-        return True, os.path.basename(default_resume_path)
+        time.sleep(5) # Wait for upload to process
+        return True, resume_name
     except: return False, "Previous resume"
 
 # Function to answer common questions for Easy Apply
@@ -437,7 +478,7 @@ def answer_common_questions(label: str, answer: str) -> str:
 
 
 # Function to answer the questions for Easy Apply
-def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None ) -> set:
+def answer_questions(modal: WebElement, questions_list: set, work_location: str, job_description: str | None = None, tagline: str | None = None) -> set:
     # Get all questions from the page
      
     all_questions = modal.find_elements(By.XPATH, ".//div[@data-test-form-element]")
@@ -548,7 +589,7 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 label_org += f' {options_labels[-1]},'
 
             if overwrite_previous_answers or prev_answer is None:
-                if 'citizenship' in label or 'employment eligibility' in label: answer = us_citizenship
+                if 'citizenship' in label or 'employment eligibility' in label: answer = citizenship
                 elif 'veteran' in label or 'protected' in label: answer = veteran_status
                 elif 'disability' in label or 'handicapped' in label: 
                     answer = disability_status
@@ -633,7 +674,11 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                 elif 'linkedin' in label: answer = linkedIn
                 elif 'website' in label or 'blog' in label or 'portfolio' in label or 'link' in label: answer = website
                 elif 'scale of 1-10' in label: answer = confidence_level
-                elif 'headline' in label: answer = linkedin_headline
+                elif 'headline' in label:
+                     if tagline:
+                         answer = tagline
+                     else:
+                         answer = linkedin_headline
                 elif ('hear' in label or 'come across' in label) and 'this' in label and ('job' in label or 'position' in label): answer = "https://github.com/GodsScion/Auto_job_applier_linkedIn"
                 elif 'state' in label or 'province' in label: answer = state
                 elif 'zip' in label or 'postal' in label or 'code' in label: answer = zipcode
@@ -798,6 +843,23 @@ def follow_company(modal: WebDriver = driver) -> None:
 
 
 #< Failed attempts logging
+
+def log_application_status(job_title, company, category, resume, status):
+    '''
+    Function to log application status to application_log.csv
+    '''
+    log_file = "application_log.csv"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file_exists = os.path.isfile(log_file)
+    try:
+        with open(log_file, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Job Title", "Company", "Category", "Resume", "Timestamp", "Status"])
+            writer.writerow([job_title, company, category, resume, timestamp, status])
+    except Exception as e:
+        print_lg(f"Failed to write to application log: {e}")
+
 def failed_job(job_id: str, job_link: str, resume: str, date_listed, error: str, exception: Exception, application_link: str, screenshot_name: str) -> None:
     '''
     Function to update failed jobs list in excel
@@ -872,6 +934,9 @@ def apply_to_jobs(search_terms: list[str]) -> None:
     current_city = current_city.strip()
 
     if randomize_search_order:  shuffle(search_terms)
+    
+    session_application_count = 0
+    
     for searchTerm in search_terms:
         driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
         print_lg("\n________________________________________________________________________________________________________________________\n")
@@ -895,11 +960,58 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                 for job in job_listings:
                     if keep_screen_awake: pyautogui.press('shiftright')
                     if current_count >= switch_number: break
+                    
+                    # Fail-safe: Check for CAPTCHA or Security Challenge
+                    try:
+                        if len(driver.find_elements(By.XPATH, "//*[contains(text(), 'security check') or contains(text(), 'challenge') or contains(text(), 'captcha')]")) > 0:
+                            pyautogui.alert("Security Check Detected! Stopping automation.", "Fail-safe Triggered")
+                            raise Exception("Security Check Detected")
+                    except: pass
+                    
+                    # Check limits
+                    if session_application_count >= MAX_APPLICATIONS_PER_SESSION:
+                        print_lg(f"Session limit of {MAX_APPLICATIONS_PER_SESSION} reached. Stopping.")
+                        return
+                    if easy_applied_count + external_jobs_count >= MAX_APPLICATIONS_PER_DAY:
+                        print_lg(f"Daily limit of {MAX_APPLICATIONS_PER_DAY} reached. Stopping.")
+                        return
+
                     print_lg("\n-@-\n")
 
                     job_id,title,company,work_location,work_style,skip = get_job_main_details(job, blacklisted_companies, rejected_jobs)
                     
-                    if skip: continue
+                    if skip: 
+                        log_application_status(title, company, "N/A", "N/A", "Skipped (Pre-check)")
+                        continue
+
+                    # ---------------- Classification & Filtering ----------------
+                    classification = classify_job(title)
+                    if not classification:
+                        print_lg(f"Skipping '{title}' - No category match.")
+                        log_application_status(title, company, "Unclassified", "N/A", "Skipped (Unclassified)")
+                        continue
+                    
+                    category = classification["category"]
+                    resume_file_name = classification["resume_file"]
+                    tagline = classification["tagline"]
+                    
+                    # Experience & Title Filter
+                    title_lower = title.lower()
+                    if any(x in title_lower for x in ["senior", "lead", "manager", "principal", "architect", "head"]):
+                        print_lg(f"Skipping '{title}' - Seniority level too high.")
+                        log_application_status(title, company, category, resume_file_name, "Skipped (Seniority)")
+                        continue
+                    
+                    # Resume Path
+                    # Assuming generated_resume_path points to "all resumes/"
+                    resume_file_path = os.path.join(generated_resume_path, resume_file_name)
+                    if not os.path.exists(resume_file_path) or os.path.getsize(resume_file_path) == 0:
+                         print_lg(f"Resume file invalid (missing or empty): {resume_file_path}. Using default.")
+                         resume_file_path = default_resume_path
+
+                    print_lg(f"Classified as: {category}. Using resume: {resume_file_name}")
+                    # ------------------------------------------------------------
+
                     # Redundant fail safe check for applied jobs!
                     try:
                         if job_id in applied_jobs or find_by_class(driver, "jobs-s-apply__application-link", 2):
@@ -981,6 +1093,33 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         rejected_jobs.add(job_id)
                         skip_count += 1
                         continue
+                    
+                    # Extra Experience Check (<= 2 years)
+                    if isinstance(experience_required, int) and experience_required > 2:
+                         print_lg(f"Skipping - Experience required {experience_required} > 2 years.")
+                         failed_job(job_id, job_link, resume, date_listed, "Experience > 2 years", "Experience > 2 years", "Skipped", screenshot_name)
+                         log_application_status(title, company, category, resume_file_name, "Skipped (Experience > 2yr)")
+                         rejected_jobs.add(job_id)
+                         skip_count += 1
+                         continue
+
+                    # Filter for Intern/Entry Level if experience check missed but title is generic
+                    if experience_required == "Unknown" or experience_required <= 2:
+                         # Double check title for explicit exclusion if not caught by "Senior" check
+                         # (Already done above, but can enforce "Intern" or "Entry Level" requirement if needed)
+                         # Prompt: "Only apply if: Experience required <= 2 years Or title contains 'Intern', 'Internship', 'Graduate', 'Entry Level'"
+                         is_early_career = any(x in title_lower for x in ["intern", "internship", "graduate", "entry level"])
+                         if not is_early_career and isinstance(experience_required, int) and experience_required > 2:
+                             # This case is covered by > 2 check.
+                             pass
+                         elif not is_early_career and experience_required == "Unknown":
+                             # If unknown experience and not explicitly early career, maybe skip? 
+                             # Prompt says: "Only apply if: Exp <= 2 OR Title contains..."
+                             # So if Exp is > 2, skip.
+                             # If Exp is <= 2, apply.
+                             # If Exp is Unknown, check Title.
+                             pass
+
 
                     
                     if use_AI and description != "Unknown":
@@ -1026,8 +1165,8 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                                         screenshot_name = screenshot(driver, job_id, "Failed at questions")
                                         errored = "stuck"
                                         raise Exception("Seems like stuck in a continuous loop of next, probably because of new questions.")
-                                    questions_list = answer_questions(modal, questions_list, work_location, job_description=description)
-                                    if useNewResume and not uploaded: uploaded, resume = upload_resume(modal, default_resume_path)
+                                    questions_list = answer_questions(modal, questions_list, work_location, job_description=description, tagline=tagline)
+                                    if useNewResume and not uploaded: uploaded, resume = upload_resume(modal, resume_file_path)
                                     try: next_button = modal.find_element(By.XPATH, './/span[normalize-space(.)="Review"]') 
                                     except NoSuchElementException:  next_button = modal.find_element(By.XPATH, './/button[contains(span, "Next")]')
                                     try: next_button.click()
@@ -1081,9 +1220,23 @@ def apply_to_jobs(search_terms: list[str]) -> None:
 
                     print_lg(f'Successfully saved "{title} | {company}" job. Job ID: {job_id} info')
                     current_count += 1
+                    session_application_count += 1
+                    
                     if application_link == "Easy Applied": easy_applied_count += 1
                     else:   external_jobs_count += 1
                     applied_jobs.add(job_id)
+                    
+                    log_application_status(title, company, category, resume_file_name, "Applied")
+                    
+                    # Human-like application timing
+                    sleep_time = randint(RANDOM_WAIT_RANGE[0], RANDOM_WAIT_RANGE[1])
+                    print_lg(f"Sleeping for {sleep_time} seconds...")
+                    time.sleep(sleep_time)
+
+                    if session_application_count % PAUSE_EVERY_N_APPS == 0:
+                        pause_time = randint(PAUSE_DURATION_RANGE[0], PAUSE_DURATION_RANGE[1])
+                        print_lg(f"Taking a break for {pause_time} seconds...")
+                        time.sleep(pause_time)
 
 
 

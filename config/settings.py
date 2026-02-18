@@ -51,7 +51,7 @@ stop_date_cycle_at_24hr = True      # True or False, Note: True or False are cas
 # >>>>>>>>>>> RESUME GENERATOR (Experimental & In Development) <<<<<<<<<<<
 
 # Give the path to the folder where all the generated resumes are to be stored
-generated_resume_path = "all resumes/" # (In Development)
+generated_resume_path = "all resumes/default/" # (In Development)
 
 
 
@@ -83,13 +83,23 @@ smooth_scroll = False               # True or False, Note: True or False are cas
 keep_screen_awake = True            # True or False, Note: True or False are case-sensitive (Note: Will temporarily deactivate when any application dialog boxes are present (Eg: Pause before submit, Help needed for a question..))
 
 # Run in undetected mode to bypass anti-bot protections (Preview Feature, UNSTABLE. Recommended to leave it as False)
-stealth_mode = True                # True or False, Note: True or False are case-sensitive
+stealth_mode = False                # True or False, Note: True or False are case-sensitive
 
 # Do you want to get alerts on errors related to AI API connection?
 showAiErrorAlerts = False            # True or False, Note: True or False are case-sensitive
 
 # Use ChatGPT for resume building (Experimental Feature can break the application. Recommended to leave it as False) 
 # use_resume_generator = False       # True or False, Note: True or False are case-sensitive ,   This feature may only work with 'stealth_mode = True'. As ChatGPT website is hosted by CloudFlare which is protected by Anti-bot protections!
+
+
+# >>>>>>>>>>> Application Limiting & Timing <<<<<<<<<<<
+MAX_APPLICATIONS_PER_SESSION = 20
+MAX_APPLICATIONS_PER_DAY = 40
+RANDOM_WAIT_RANGE = (1, 3)        # Seconds to wait between applications
+PAUSE_EVERY_N_APPS = 5              # Pause after every N applications
+PAUSE_DURATION_RANGE = (1, 3)   # Seconds to pause (2-5 minutes)
+
+
 
 
 
