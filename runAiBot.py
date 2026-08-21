@@ -127,11 +127,6 @@ def login_LN() -> None:
     '''
     # Find the username and password fields and fill them with user credentials
     driver.get("https://www.linkedin.com/login")
-    if username == "username@example.com" and password == "example_password":
-        pyautogui.alert("User did not configure username and password in secrets.py, hence can't login automatically! Please login manually!", "Login Manually","Okay")
-        print_lg("User did not configure username and password in secrets.py, hence can't login automatically! Please login manually!")
-        manual_login_retry(is_logged_in_LN, 2)
-        return
     try:
         wait.until(EC.presence_of_element_located((By.LINK_TEXT, "Forgot password?")))
         try:
@@ -159,9 +154,8 @@ def login_LN() -> None:
         wait.until(EC.url_to_be("https://www.linkedin.com/feed/")) # wait.until(EC.presence_of_element_located((By.XPATH, '//button[normalize-space(.)="Start a post"]')))
         return print_lg("Login successful!")
     except Exception as e:
-        print_lg("Seems like login attempt failed! Possibly due to wrong credentials or already logged in! Try logging in manually!")
-        # print_lg(e)
-        manual_login_retry(is_logged_in_LN, 2)
+        print_lg("Automatic LinkedIn login failed. Check credentials or complete any LinkedIn CAPTCHA/2FA before retrying.")
+        raise RuntimeError("Automatic LinkedIn login failed. Check credentials or complete any LinkedIn CAPTCHA/2FA manually, then retry.") from e
 #>
 
 
@@ -191,7 +185,14 @@ def set_search_location() -> None:
         try:
             print_lg(f'Setting search location as: "{search_location.strip()}"')
             search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code'and not(@disabled)]", False) #  and not(@aria-hidden='true')]")
-            text_input(actions, search_location_ele, search_location, "Search Location")
+            if search_location_ele:
+                search_location_ele.clear()
+                search_location_ele.send_keys(search_location.strip())
+                sleep(2)
+                actions.send_keys(Keys.ARROW_DOWN, Keys.ENTER).perform()
+                print_lg(f'Selected search location: "{search_location.strip()}"')
+            else:
+                print_lg("Search Location input was not found!")
         except ElementNotInteractableException:
             try_xp(driver, ".//label[@class='jobs-search-box__input-icon jobs-search-box__keywords-label']")
             actions.send_keys(Keys.TAB, Keys.TAB).perform()
@@ -263,8 +264,7 @@ def apply_filters() -> None:
         show_results_button.click()
 
         global pause_after_filters
-        if pause_after_filters and "Turn off Pause after search" == pyautogui.confirm("These are your configured search results and filter. It is safe to change them while this dialog is open, any changes later could result in errors and skipping this search run.", "Please check your results", ["Turn off Pause after search", "Look's good, Continue"]):
-            pause_after_filters = False
+        pause_after_filters = False
 
     except Exception as e:
         print_lg("Setting the preferences failed!")
@@ -806,8 +806,8 @@ def external_apply(pagination_element: WebElement, job_id: str, job_link: str, r
         try:
             if "exceeded the daily application limit" in driver.find_element(By.CLASS_NAME, "artdeco-inline-feedback__message").text: dailyEasyApplyLimitReached = True
         except: pass
-        print_lg("Easy apply failed I guess!")
-        if pagination_element != None: return True, application_link, tabs_count
+        print_lg("Skipping job because Easy Apply is unavailable.")
+        return True, application_link, tabs_count
     try:
         wait.until(EC.element_to_be_clickable((By.XPATH, ".//button[contains(@class,'jobs-apply-button') and contains(@class, 'artdeco-button--3')]"))).click() # './/button[contains(span, "Apply") and not(span[contains(@class, "disabled")])]'
         wait_span_click(driver, "Continue", 1, True, False)
@@ -997,7 +997,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     
                     # Experience & Title Filter
                     title_lower = title.lower()
-                    if any(x in title_lower for x in ["senior", "lead", "manager", "principal", "architect", "head"]):
+                    if any(x in title_lower for x in ["principal", "architect", "head of"]):
                         print_lg(f"Skipping '{title}' - Seniority level too high.")
                         log_application_status(title, company, category, resume_file_name, "Skipped (Seniority)")
                         continue
@@ -1094,14 +1094,14 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                         skip_count += 1
                         continue
                     
-                    # Extra Experience Check (<= 2 years)
-                    if isinstance(experience_required, int) and experience_required > 2:
-                         print_lg(f"Skipping - Experience required {experience_required} > 2 years.")
-                         failed_job(job_id, job_link, resume, date_listed, "Experience > 2 years", "Experience > 2 years", "Skipped", screenshot_name)
-                         log_application_status(title, company, category, resume_file_name, "Skipped (Experience > 2yr)")
-                         rejected_jobs.add(job_id)
-                         skip_count += 1
-                         continue
+                    # Skip roles that require more experience than configured.
+                    if isinstance(experience_required, int) and current_experience != -1 and experience_required > current_experience:
+                        print_lg(f"Skipping - Experience required {experience_required} > {current_experience} years.")
+                        failed_job(job_id, job_link, resume, date_listed, "Experience exceeds configured experience", "Experience exceeds configured experience", "Skipped", screenshot_name)
+                        log_application_status(title, company, category, resume_file_name, "Skipped (Experience too high)")
+                        rejected_jobs.add(job_id)
+                        skip_count += 1
+                        continue
 
                     # Filter for Intern/Entry Level if experience check missed but title is generic
                     if experience_required == "Unknown" or experience_required <= 2:
@@ -1287,7 +1287,6 @@ chatGPT_tab = False
 linkedIn_tab = False
 
 def main() -> None:
-    pyautogui.alert("Please consider sponsoring this project at:\n\nhttps://github.com/sponsors/GodsScion\n\n", "Support the project", "Okay")
     total_runs = 1
     try:
         global linkedIn_tab, tabs_count, useNewResume, aiClient
@@ -1295,7 +1294,7 @@ def main() -> None:
         validate_config()
         
         if not os.path.exists(default_resume_path):
-            pyautogui.alert(text='Your default resume "{}" is missing! Please update it\'s folder path "default_resume_path" in config.py\n\nOR\n\nAdd a resume with exact name and path (check for spelling mistakes including cases).\n\n\nFor now the bot will continue using your previous upload from LinkedIn!'.format(default_resume_path), title="Missing Resume", button="OK")
+            print_lg("No local resume found; LinkedIn Easy Apply will use the previously saved resume.")
             useNewResume = False
         
         # Login to LinkedIn

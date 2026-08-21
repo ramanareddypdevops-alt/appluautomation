@@ -45,7 +45,7 @@ JOB_CATEGORIES = {
     },
     "Cloud / Network": {
         "keywords": [
-            "cloud engineer", "network engineer", "devops", "infrastructure", 
+            "azure devops", "cloud engineer", "network engineer", "devops", "infrastructure", 
             "cloud security"
         ],
         "resume_file": "cloud.pdf",
