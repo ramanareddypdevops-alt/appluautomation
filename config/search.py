@@ -19,10 +19,11 @@ version:    26.01.20.5.08
 
 # These Sentences are Searched in LinkedIn
 # Enter your search terms inside '[ ]' with quotes ' "searching title" ' for each search followed by comma ', ' Eg: ["Software Engineer", "Software Developer", "Selenium Developer"]
-search_terms = ["Azure DevOps Engineer", "Azure DevOps Lead", "Azure DevOps Manager", "DevOps Engineer", "Senior DevOps Engineer", "Lead DevOps Engineer", "DevOps Manager", "DevOps Team Lead", "DevOps Engineering Manager", "Cloud Engineer", "Lead Cloud Engineer", "Site Reliability Engineer", "Platform Engineer", "DevSecOps Engineer", "Infrastructure Engineer", "Cloud Operations Engineer"]
+search_terms = ["Azure DevOps Engineer", "Senior Azure DevOps Engineer", "Lead Azure DevOps Engineer", "Azure DevOps Manager", "DevOps Engineer", "Senior DevOps Engineer", "Lead DevOps Engineer", "DevOps Manager", "DevOps Team Lead", "DevOps Engineering Manager", "Cloud Architect", "Azure Cloud Architect", "DevOps Architect"]
 
 # Search location, this will be filled in "City, state, or zip code" search box. If left empty as "", tool will not fill it.
-search_location = "Netherlands"          # Direct location search across the Netherlands.
+search_location = "London, England, United Kingdom"  # Direct location for the current test.
+search_locations = ["London, England, United Kingdom"]
 
 # After how many number of applications in current search should the bot switch to next search? 
 switch_number = 30                 # Only numbers greater than 0... Don't put in quotes
@@ -54,7 +55,7 @@ salary = ""                        # "$40,000+", "$60,000+", "$80,000+", "$100,0
 
 easy_apply_only = True             # True or False, Note: True or False are case-sensitive
 
-experience_level = ["Associate", "Mid-Senior level"]              # (multiple select) "Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"
+experience_level = ["Mid-Senior level", "Director"]              # (multiple select) "Internship", "Entry level", "Associate", "Mid-Senior level", "Director", "Executive"
 job_type = []                      # (multiple select) "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship", "Other"
 on_site = []                       # (multiple select) "On-site", "Remote", "Hybrid"
 
@@ -91,7 +92,7 @@ about_company_bad_words = ["Crossover"]       # (dynamic multiple search) or lea
 about_company_good_words = []      # (dynamic multiple search) or leave empty as []. Ex: ["Robert Half", "Dice"]
 
 # Avoid applying to these companies if they have these bad words in their 'Job Description' section...  (In development)
-bad_words = ["US Citizen","USA Citizen","No C2C", "No Corp2Corp", ".NET", "Embedded Programming", "PHP", "Ruby", "CNC"]                     # (dynamic multiple search) or leave empty as []. Case Insensitive. Ex: ["word_1", "phrase 1", "word word", "polygraph", "US Citizenship", "Security Clearance"]
+bad_words = ["US Citizen", "USA Citizen", "US citizenship", "UK citizenship", "British citizenship", "nationality requirement", "No C2C", "No Corp2Corp", "security clearance", "SC clearance", "DV clearance", "Developed Vetting", "Counter Terrorist Check", "CTC clearance", "BPSS", "security cleared", "classified", "government security", "export control", "ITAR", "no visa sponsorship", "visa sponsorship is not available", "does not sponsor", "without sponsorship", "must have the right to work", ".NET", "Embedded Programming", "PHP", "Ruby", "CNC"]                     # (dynamic multiple search) or leave empty as []. Case Insensitive.
 
 # Do you have an active Security Clearance? (True for Yes and False for No)
 security_clearance = False         # True or False, Note: True or False are case-sensitive

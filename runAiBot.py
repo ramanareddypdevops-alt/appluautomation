@@ -78,6 +78,7 @@ randomly_answered_questions = set()
 tabs_count = 1
 easy_applied_count = 0
 external_jobs_count = 0
+session_application_count = 0
 failed_count = 0
 skip_count = 0
 dailyEasyApplyLimitReached = False
@@ -110,7 +111,7 @@ def is_logged_in_LN() -> bool:
     Function to check if user is logged-in in LinkedIn
     * Returns: `True` if user is logged-in or `False` if not
     '''
-    if driver.current_url == "https://www.linkedin.com/feed/": return True
+    if "/feed" in driver.current_url: return True
     if try_linkText(driver, "Sign in"): return False
     if try_xp(driver, '//button[@type="submit" and contains(text(), "Sign in")]'):  return False
     if try_linkText(driver, "Join now"): return False
@@ -127,35 +128,31 @@ def login_LN() -> None:
     '''
     # Find the username and password fields and fill them with user credentials
     driver.get("https://www.linkedin.com/login")
+    automatic_login_error = None
     try:
-        wait.until(EC.presence_of_element_located((By.LINK_TEXT, "Forgot password?")))
-        try:
-            text_input_by_ID(driver, "username", username, 1)
-        except Exception as e:
-            print_lg("Couldn't find username field.")
-            # print_lg(e)
-        try:
-            text_input_by_ID(driver, "password", password, 1)
-        except Exception as e:
-            print_lg("Couldn't find password field.")
-            # print_lg(e)
-        # Find the login submit button and click it
-        driver.find_element(By.XPATH, '//button[@type="submit" and contains(text(), "Sign in")]').click()
-    except Exception as e1:
-        try:
-            profile_button = find_by_class(driver, "profile__details")
-            profile_button.click()
-        except Exception as e2:
-            # print_lg(e1, e2)
-            print_lg("Couldn't Login!")
+        WebDriverWait(driver, 15).until(lambda current_driver: current_driver.execute_script("return document.readyState") == "complete")
+        username_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#username, input[name='session_key'], input[autocomplete='username'], input[type='email']")))
+        password_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#password, input[name='session_password'], input[autocomplete='current-password'], input[type='password']")))
+        username_field.clear()
+        username_field.send_keys(username)
+        password_field.clear()
+        password_field.send_keys(password)
+        submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit'], button[data-id='sign-in-form__submit-btn'], button[aria-label*='Sign in']")))
+        submit_button.click()
+    except Exception as error:
+        automatic_login_error = error
+        print_lg("Automatic LinkedIn login was unavailable; waiting for manual login in the bot browser.")
 
     try:
         # Wait until successful redirect, indicating successful login
-        wait.until(EC.url_to_be("https://www.linkedin.com/feed/")) # wait.until(EC.presence_of_element_located((By.XPATH, '//button[normalize-space(.)="Start a post"]')))
+        WebDriverWait(driver, 120).until(lambda current_driver: "/feed" in current_driver.current_url)
+        if "/feed" not in driver.current_url:
+            raise RuntimeError("LinkedIn requires CAPTCHA, 2FA, or checkpoint verification.")
         return print_lg("Login successful!")
     except Exception as e:
-        print_lg("Automatic LinkedIn login failed. Check credentials or complete any LinkedIn CAPTCHA/2FA before retrying.")
-        raise RuntimeError("Automatic LinkedIn login failed. Check credentials or complete any LinkedIn CAPTCHA/2FA manually, then retry.") from e
+        if automatic_login_error:
+            raise RuntimeError("LinkedIn login did not complete automatically or manually within 120 seconds.") from automatic_login_error
+        raise RuntimeError("LinkedIn login did not complete within 120 seconds.") from e
 #>
 
 
@@ -268,7 +265,7 @@ def apply_filters() -> None:
 
     except Exception as e:
         print_lg("Setting the preferences failed!")
-        pyautogui.confirm(f"Faced error while applying filters. Please make sure correct filters are selected, click on show results and click on any button of this dialog, I know it sucks. Can't turn off Pause after search when error occurs! ERROR: {e}", "Filter Error", ["Doesn't look good, but Continue XD", "Look's good, Continue"])
+        print_lg(f"Filter setup failed; continuing without interactive confirmation. ERROR: {e}")
         # print_lg(e)
 
 
@@ -873,7 +870,7 @@ def failed_job(job_id: str, job_link: str, resume: str, date_listed, error: str,
             file.close()
     except Exception as e:
         print_lg("Failed to update failed jobs list!", e)
-        pyautogui.alert("Failed to update the excel of failed jobs!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
+        print_lg("Failed to update the failed-jobs log.")
 
 
 def screenshot(driver: WebDriver, job_id: str, failedAt: str) -> str:
@@ -911,7 +908,7 @@ def submitted_jobs(job_id: str, title: str, company: str, work_location: str, wo
         csv_file.close()
     except Exception as e:
         print_lg("Failed to update submitted jobs list!", e)
-        pyautogui.alert("Failed to update the excel of applied jobs!\nProbably because of 1 of the following reasons:\n1. The file is currently open or in use by another program\n2. Permission denied to write to the file\n3. Failed to find the file", "Failed Logging")
+        print_lg("Failed to update the applied-jobs log.")
 
 
 
@@ -926,16 +923,14 @@ def discard_job() -> None:
 
 
 # Function to apply to jobs
-def apply_to_jobs(search_terms: list[str]) -> None:
+def apply_to_jobs_for_location(search_terms: list[str]) -> None:
     applied_jobs = get_applied_job_ids()
     rejected_jobs = set()
     blacklisted_companies = set()
-    global current_city, failed_count, skip_count, easy_applied_count, external_jobs_count, tabs_count, pause_before_submit, pause_at_failed_question, useNewResume
+    global current_city, failed_count, skip_count, easy_applied_count, external_jobs_count, session_application_count, tabs_count, pause_before_submit, pause_at_failed_question, useNewResume
     current_city = current_city.strip()
 
     if randomize_search_order:  shuffle(search_terms)
-    
-    session_application_count = 0
     
     for searchTerm in search_terms:
         driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
@@ -963,10 +958,12 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     
                     # Fail-safe: Check for CAPTCHA or Security Challenge
                     try:
-                        if len(driver.find_elements(By.XPATH, "//*[contains(text(), 'security check') or contains(text(), 'challenge') or contains(text(), 'captcha')]")) > 0:
-                            pyautogui.alert("Security Check Detected! Stopping automation.", "Fail-safe Triggered")
-                            raise Exception("Security Check Detected")
-                    except: pass
+                        if len(driver.find_elements(By.XPATH, "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'security check') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'challenge') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'captcha')]") ) > 0:
+                            raise RuntimeError("Security challenge detected; stopping automation.")
+                    except RuntimeError:
+                        raise
+                    except Exception:
+                        pass
                     
                     # Check limits
                     if session_application_count >= MAX_APPLICATIONS_PER_SESSION:
@@ -997,7 +994,7 @@ def apply_to_jobs(search_terms: list[str]) -> None:
                     
                     # Experience & Title Filter
                     title_lower = title.lower()
-                    if any(x in title_lower for x in ["principal", "architect", "head of"]):
+                    if any(x in title_lower for x in ["principal", "head of"]) or ("architect" in title_lower and "cloud architect" not in title_lower and "devops architect" not in title_lower):
                         print_lg(f"Skipping '{title}' - Seniority level too high.")
                         log_application_status(title, company, category, resume_file_name, "Skipped (Seniority)")
                         continue
@@ -1264,6 +1261,19 @@ def apply_to_jobs(search_terms: list[str]) -> None:
             # print_lg(e)
 
         
+def apply_to_jobs(search_terms: list[str]) -> None:
+    '''
+    Searches each configured location in sequence and applies only to matching jobs.
+    '''
+    global search_location
+    for target_location in search_locations:
+        search_location = target_location
+        print_lg(f'\n===== Starting location: "{target_location}" =====\n')
+        apply_to_jobs_for_location(search_terms)
+        if dailyEasyApplyLimitReached:
+            break
+
+
 def run(total_runs: int) -> int:
     if dailyEasyApplyLimitReached:
         return total_runs
@@ -1354,7 +1364,7 @@ def main() -> None:
         print_lg("Browser window closed or session is invalid. Exiting.", e)
     except Exception as e:
         critical_error_log("In Applier Main", e)
-        pyautogui.alert(e,alert_title)
+        print_lg(f"{alert_title}: {e}")
     finally:
         summary = "Total runs: {}\nJobs Easy Applied: {}\nExternal job links collected: {}\nTotal applied or collected: {}\nFailed jobs: {}\nIrrelevant jobs skipped: {}\n".format(total_runs,easy_applied_count,external_jobs_count,easy_applied_count + external_jobs_count,failed_count,skip_count)
         print_lg(summary)
@@ -1387,11 +1397,9 @@ def main() -> None:
             timeSaved += 60
             timeSavedMsg = f"In this run, you saved approx {round(timeSaved/60)} mins ({timeSaved} secs), please consider supporting the project."
         msg = f"{quotes}\n\n\n{timeSavedMsg}\nYou can also get your quote and name shown here, or prioritize your bug reports by supporting the project at:\n\nhttps://github.com/sponsors/GodsScion\n\n\nSummary:\n{summary}\n\n\nBest regards,\nSai Vignesh Golla\nhttps://www.linkedin.com/in/saivigneshgolla/\n\nTop Sponsors:\n{sponsors}"
-        pyautogui.alert(msg, "Exiting..")
         print_lg(msg,"Closing the browser...")
         if tabs_count >= 10:
             msg = "NOTE: IF YOU HAVE MORE THAN 10 TABS OPENED, PLEASE CLOSE OR BOOKMARK THEM!\n\nOr it's highly likely that application will just open browser and not do anything next time!" 
-            pyautogui.alert(msg,"Info")
             print_lg("\n"+msg)
         ##> ------ Yang Li : MARKYangL - Feature ------
         if use_AI and aiClient:

@@ -113,6 +113,7 @@ def validate_search() -> None | ValueError | TypeError:
 
     check_list(search_terms, "search_terms", min_length=1)
     check_string(search_location, "search_location")
+    check_list(search_locations, "search_locations", min_length=1)
     check_int(switch_number, "switch_number", 1)
     check_boolean(randomize_search_order, "randomize_search_order")
 

@@ -9,6 +9,8 @@ logs
 old
 
 secrets.py
+config/secrets.py
+debug.log
 config/personals.py
 .venv
 apikeys.py

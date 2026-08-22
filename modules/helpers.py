@@ -21,6 +21,7 @@ import os
 import sys
 import json
 import pathlib
+import tempfile
 
 from time import sleep
 from random import randint
@@ -61,7 +62,7 @@ def get_default_temp_profile() -> str:
     # Thanks to https://github.com/vinodbavage31 for suggestion!
     home = pathlib.Path.home()
     if sys.platform.startswith('win'):
-        return r"C:\temp\auto-job-apply-profile"
+        return os.path.join(tempfile.gettempdir(), f"auto-job-apply-profile-{os.getpid()}")
     elif sys.platform.startswith('linux'):
         return str(home / ".auto-job-apply-profile")
     return str(home / "Library" / "Application Support" / "Google" / "Chrome" / "auto-job-apply-profile")

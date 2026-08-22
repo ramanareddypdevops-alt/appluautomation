@@ -44,7 +44,7 @@ citizenship = "Non-citizen seeking work authorization"
 ## SOME ANNOYING QUESTIONS BY COMPANIES 🫠 ##
 
 # What to enter in your desired salary question (American and European), What is your expected CTC (South Asian and others)?, only enter in numbers as some companies only allow numbers,
-desired_salary = 90000            # EUR gross annual expectation; target range is EUR 80,000-100,000. Do NOT use quotes
+desired_salary = 115000           # GBP gross annual expectation; target range is GBP 80,000-150,000. Do NOT use quotes
 '''
 Note: If question has the word "lakhs" in it (Example: What is your expected CTC in lakhs), 
 then it will add '.' before last 5 digits and answer. Examples: 
@@ -68,7 +68,7 @@ then it will add '.' before last 5 digits and answer. Examples:
 '''
 
 # (In Development) # Currency of salaries you mentioned. Companies that allow string inputs will add this tag to the end of numbers. Eg: 
-currency = "EUR"                 # "USD", "INR", "EUR", etc.
+currency = "GBP"                 # "USD", "INR", "EUR", "AUD", "GBP", etc.
 
 # What is your notice period in days?
 notice_period = 30                   # Any number >= 0 without quotes. Eg: 0, 7, 15, 30, 45, etc.
@@ -124,14 +124,14 @@ confidence_level = "8"             # Any number between "1" to "10" including 1 
 
 ## Allow Manual Inputs
 # Should the tool pause before every submit application during easy apply to let you check the information?
-pause_before_submit = True         # True or False, Note: True or False are case-sensitive
+pause_before_submit = False        # True or False, Note: True or False are case-sensitive
 '''
 Note: Will be treated as False if `run_in_background = True`
 '''
 
 # Should the tool pause if it needs help in answering questions during easy apply?
 # Note: If set as False will answer randomly...
-pause_at_failed_question = True    # True or False, Note: True or False are case-sensitive
+pause_at_failed_question = False   # True or False, Note: True or False are case-sensitive
 '''
 Note: Will be treated as False if `run_in_background = True`
 '''
