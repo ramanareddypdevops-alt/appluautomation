@@ -44,7 +44,7 @@ citizenship = "Non-citizen seeking work authorization"
 ## SOME ANNOYING QUESTIONS BY COMPANIES 🫠 ##
 
 # What to enter in your desired salary question (American and European), What is your expected CTC (South Asian and others)?, only enter in numbers as some companies only allow numbers,
-desired_salary = 115000           # GBP gross annual expectation; target range is GBP 80,000-150,000. Do NOT use quotes
+desired_salary = 90000            # EUR gross annual expectation for European applications. Do NOT use quotes
 '''
 Note: If question has the word "lakhs" in it (Example: What is your expected CTC in lakhs), 
 then it will add '.' before last 5 digits and answer. Examples: 
@@ -68,7 +68,7 @@ then it will add '.' before last 5 digits and answer. Examples:
 '''
 
 # (In Development) # Currency of salaries you mentioned. Companies that allow string inputs will add this tag to the end of numbers. Eg: 
-currency = "GBP"                 # "USD", "INR", "EUR", "AUD", "GBP", etc.
+currency = "EUR"                 # "USD", "INR", "EUR", "AUD", "GBP", etc.
 
 # What is your notice period in days?
 notice_period = 30                   # Any number >= 0 without quotes. Eg: 0, 7, 15, 30, 45, etc.

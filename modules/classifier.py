@@ -46,7 +46,8 @@ JOB_CATEGORIES = {
     "Cloud / Network": {
         "keywords": [
             "azure devops", "cloud engineer", "network engineer", "devops", "infrastructure", 
-            "cloud security"
+            "cloud security", "site reliability", "sre", "platform engineer", "devsecops",
+            "mlops", "release automation", "cloud architect", "infra manager", "infrastructure manager"
         ],
         "resume_file": "cloud.pdf",
         "tagline": "Cloud & Infrastructure Intern | Secure Distributed Systems"

@@ -21,6 +21,7 @@ import csv
 import re
 import time
 import pyautogui
+from urllib.parse import quote
 
 # Set CSV field size limit to prevent field size errors
 csv.field_size_limit(1000000)  # Set to 1MB instead of default 131KB
@@ -29,11 +30,12 @@ from random import choice, shuffle, randint
 from datetime import datetime
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support.select import Select
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, NoSuchWindowException, ElementNotInteractableException, WebDriverException
+from selenium.common.exceptions import NoSuchElementException, ElementClickInterceptedException, NoSuchWindowException, ElementNotInteractableException, StaleElementReferenceException, TimeoutException, InvalidSessionIdException, WebDriverException
 
 from config.personals import *
 from config.questions import *
@@ -128,31 +130,78 @@ def login_LN() -> None:
     '''
     # Find the username and password fields and fill them with user credentials
     driver.get("https://www.linkedin.com/login")
+    if manual_login_only:
+        print_lg("Browser-only LinkedIn login enabled; please complete login in the opened browser window.")
+        try:
+            WebDriverWait(driver, 600).until(lambda current_driver: "/feed" in current_driver.current_url)
+            return print_lg("Login successful!")
+        except Exception as error:
+            raise RuntimeError("Browser-only LinkedIn login did not complete within 600 seconds.") from error
     automatic_login_error = None
     try:
         WebDriverWait(driver, 15).until(lambda current_driver: current_driver.execute_script("return document.readyState") == "complete")
-        username_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#username, input[name='session_key'], input[autocomplete='username'], input[type='email']")))
-        password_field = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#password, input[name='session_password'], input[autocomplete='current-password'], input[type='password']")))
+        username_field = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#username, input[name='session_key'], input[autocomplete='username'], input[type='email'], input[placeholder*='Email']")))
+        username_field.click()
+        sleep(0.5)
         username_field.clear()
         username_field.send_keys(username)
+
+        password_field = WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.CSS_SELECTOR, "input#password, input[name='session_password'], input[autocomplete='current-password'], input[type='password'], input[placeholder*='Password']")))
+        password_field.click()
+        sleep(0.5)
         password_field.clear()
         password_field.send_keys(password)
-        submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit'], button[data-id='sign-in-form__submit-btn'], button[aria-label*='Sign in']")))
-        submit_button.click()
     except Exception as error:
         automatic_login_error = error
-        print_lg("Automatic LinkedIn login was unavailable; waiting for manual login in the bot browser.")
+        print_lg("Login inputs are not fully interactable; trying JavaScript input fallback.")
+        try:
+            if 'username_field' not in locals() or not username_field:
+                username_field = driver.find_element(By.CSS_SELECTOR, "input#username, input[name='session_key'], input[autocomplete='username'], input[type='email'], input[placeholder*='Email']")
+            if 'password_field' not in locals() or not password_field:
+                password_field = driver.find_element(By.CSS_SELECTOR, "input#password, input[name='session_password'], input[autocomplete='current-password'], input[type='password'], input[placeholder*='Password']")
+            driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles:true}));", username_field, username)
+            driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input', {bubbles:true}));", password_field, password)
+            sleep(1)
+        except Exception as js_error:
+            print_lg("JavaScript fallback failed:", js_error)
+
+    try:
+        submit_button = None
+        try:
+            submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit'], button[data-id='sign-in-form__submit-btn'], button[aria-label*='Sign in'], button[class*='sign-in'], button[class*='login__form_action_button']")))
+        except TimeoutException:
+            submit_button = try_xp(driver, "//button[contains(normalize-space(), 'Sign in') or contains(normalize-space(), 'Continue') or contains(normalize-space(), 'Submit') or contains(normalize-space(), 'Log in')]", False)
+
+        if submit_button:
+            try:
+                submit_button.click()
+            except Exception:
+                try:
+                    driver.execute_script("arguments[0].click();", submit_button)
+                except Exception:
+                    pass
+        else:
+            if 'password_field' in locals() and password_field:
+                try:
+                    password_field.send_keys(Keys.ENTER)
+                except Exception as enter_error:
+                    raise RuntimeError("LinkedIn login submit button not found and Enter fallback failed.") from enter_error
+            else:
+                raise RuntimeError("LinkedIn login submit button not found.")
+    except Exception as error:
+        automatic_login_error = automatic_login_error or error
+        print_lg(f"Automatic LinkedIn login was unavailable ({type(error).__name__}: {error}); waiting for manual login in the bot browser.")
 
     try:
         # Wait until successful redirect, indicating successful login
-        WebDriverWait(driver, 120).until(lambda current_driver: "/feed" in current_driver.current_url)
+        WebDriverWait(driver, 300).until(lambda current_driver: "/feed" in current_driver.current_url)
         if "/feed" not in driver.current_url:
             raise RuntimeError("LinkedIn requires CAPTCHA, 2FA, or checkpoint verification.")
         return print_lg("Login successful!")
     except Exception as e:
         if automatic_login_error:
-            raise RuntimeError("LinkedIn login did not complete automatically or manually within 120 seconds.") from automatic_login_error
-        raise RuntimeError("LinkedIn login did not complete within 120 seconds.") from e
+            raise RuntimeError("LinkedIn login did not complete automatically or manually within 300 seconds.") from automatic_login_error
+        raise RuntimeError("LinkedIn login did not complete within 300 seconds.") from e
 #>
 
 
@@ -179,25 +228,52 @@ def set_search_location() -> None:
     Function to set search location
     '''
     if search_location.strip():
+        print_lg(f'Setting search location as: "{search_location.strip()}"')
         try:
-            print_lg(f'Setting search location as: "{search_location.strip()}"')
-            search_location_ele = try_xp(driver, ".//input[@aria-label='City, state, or zip code'and not(@disabled)]", False) #  and not(@aria-hidden='true')]")
-            if search_location_ele:
-                search_location_ele.clear()
-                search_location_ele.send_keys(search_location.strip())
-                sleep(2)
-                actions.send_keys(Keys.ARROW_DOWN, Keys.ENTER).perform()
-                print_lg(f'Selected search location: "{search_location.strip()}"')
-            else:
-                print_lg("Search Location input was not found!")
+            for attempt in range(3):
+                try:
+                    search_location_ele = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, ".//input[@aria-label='City, state, or zip code' and not(@disabled)]"))
+                    )
+                    search_location_ele.click()
+                    search_location_ele.send_keys(Keys.CONTROL, "a", Keys.BACKSPACE)
+                    search_location_ele.clear()
+                    search_location_ele.send_keys(search_location.strip())
+                    sleep(2)
+                    search_location_ele.send_keys(Keys.ARROW_DOWN, Keys.ENTER)
+                    search_button = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, ".//button[@aria-label='Search']"))
+                    )
+                    search_button.click()
+                    sleep(3)
+                    print_lg(f'Selected search location: "{search_location.strip()}"')
+                    return
+                except StaleElementReferenceException:
+                    if attempt == 2:
+                        raise
+                    print_lg("LinkedIn refreshed the location field; retrying...")
+                    sleep(1)
+                except TimeoutException:
+                    if attempt == 2:
+                        print_lg("Search location input was not found in time, continuing with default location!")
+                        return
+                    print_lg("Search location input not ready yet; retrying...")
+                    sleep(1)
         except ElementNotInteractableException:
             try_xp(driver, ".//label[@class='jobs-search-box__input-icon jobs-search-box__keywords-label']")
             actions.send_keys(Keys.TAB, Keys.TAB).perform()
             actions.key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).perform()
+            actions.send_keys(Keys.BACKSPACE).perform()
             actions.send_keys(search_location.strip()).perform()
             sleep(2)
-            actions.send_keys(Keys.ENTER).perform()
+            actions.send_keys(Keys.ARROW_DOWN, Keys.ENTER).perform()
+            search_button = try_xp(driver, ".//button[@aria-label='Search']", False)
+            if search_button:
+                search_button.click()
+                sleep(3)
             try_xp(driver, ".//button[@aria-label='Cancel']")
+        except (NoSuchWindowException, InvalidSessionIdException):
+            raise
         except Exception as e:
             try_xp(driver, ".//button[@aria-label='Cancel']")
             print_lg("Failed to update search location, continuing with default location!", e)
@@ -213,13 +289,13 @@ def apply_filters() -> None:
         recommended_wait = 1 if click_gap < 1 else 0
 
         wait.until(EC.presence_of_element_located((By.XPATH, '//button[normalize-space()="All filters"]'))).click()
+        buffer(recommended_wait + 1)
+
+        wait_span_click(driver, sort_by, 8)
+        wait_span_click(driver, date_posted, 8)
         buffer(recommended_wait)
 
-        wait_span_click(driver, sort_by)
-        wait_span_click(driver, date_posted)
-        buffer(recommended_wait)
-
-        multi_sel_noWait(driver, experience_level) 
+        multi_sel(driver, experience_level, 8)
         multi_sel_noWait(driver, companies, actions)
         if experience_level or companies: buffer(recommended_wait)
 
@@ -303,13 +379,25 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
     scroll_to_view(driver, job_details_button, True)
     job_id = job.get_dom_attribute('data-occludable-job-id')
     title = job_details_button.text
-    title = title[:title.find("\n")]
+    newline_index = title.find("\n")
+    if newline_index != -1: title = title[:newline_index]
     # company = job.find_element(By.CLASS_NAME, "job-card-container__primary-description").text
     # work_location = job.find_element(By.CLASS_NAME, "job-card-container__metadata-item").text
-    other_details = job.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
-    index = other_details.find(' · ')
-    company = other_details[:index]
-    work_location = other_details[index+3:]
+    try:
+        company = job.find_element(By.CLASS_NAME, "job-card-container__primary-description").text
+    except NoSuchElementException:
+        other_details = job.find_element(By.CLASS_NAME, 'artdeco-entity-lockup__subtitle').text
+        company = other_details.split(' · ', 1)[0]
+    metadata_elements = job.find_elements(By.CLASS_NAME, "job-card-container__metadata-item")
+    if metadata_elements:
+        work_location = " ".join(element.text for element in metadata_elements)
+    else:
+        card_lines = [line.strip() for line in job.text.splitlines() if line.strip()]
+        try:
+            company_index = card_lines.index(company)
+            work_location = card_lines[company_index + 1] if company_index + 1 < len(card_lines) else "Unknown"
+        except ValueError:
+            work_location = "Unknown"
     work_style = work_location[work_location.rfind('(')+1:work_location.rfind(')')]
     work_location = work_location[:work_location.rfind('(')].strip()
     
@@ -325,13 +413,19 @@ def get_job_main_details(job: WebElement, blacklisted_companies: set, rejected_j
             skip = True
             print_lg(f'Already applied to "{title} | {company}" job. Job ID: {job_id}!')
     except: pass
-    try: 
-        if not skip: job_details_button.click()
-    except Exception as e:
-        print_lg(f'Failed to click "{title} | {company}" job on details button. Job ID: {job_id}!') 
-        # print_lg(e)
-        discard_job()
-        job_details_button.click() # To pass the error outside
+    if not skip:
+        try:
+            job_details_button.click()
+        except ElementClickInterceptedException:
+            print_lg(f'Job card overlay intercepted "{title} | {company}". Retrying with DOM click.')
+            driver.execute_script("arguments[0].click();", job_details_button)
+        except Exception as error:
+            print_lg(f'Failed to click "{title} | {company}" job on details button. Job ID: {job_id}!', error)
+            try:
+                driver.execute_script("arguments[0].click();", job_details_button)
+            except Exception:
+                discard_job()
+                raise
     buffer(click_gap)
     return (job_id,title,company,work_location,work_style,skip)
 
@@ -407,6 +501,10 @@ def get_job_description(
                 skipReason = "Found a Bad Word in About Job"
                 skip = True
                 break
+        if not skip and sponsorship_required and not any(term.lower() in jobDescriptionLow for term in sponsorship_terms):
+            skipMessage = f'\n{jobDescription}\n\nNo explicit visa sponsorship information found. Skipping this job!\n'
+            skipReason = "No visa sponsorship confirmation"
+            skip = True
         if not skip and security_clearance == False and ('polygraph' in jobDescriptionLow or 'clearance' in jobDescriptionLow or 'secret' in jobDescriptionLow):
             skipMessage = f'\n{jobDescription}\n\nFound "Clearance" or "Polygraph". Skipping this job!\n'
             skipReason = "Asking for Security clearance"
@@ -724,6 +822,8 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
             label = label_org.lower()
             answer = ""
             prev_answer = text_area.get_attribute("value")
+            # Generic fallback so open-ended questions never get submitted blank (blank answers fail LinkedIn's required-field validation and abort the whole application).
+            fallback_answer = (cover_letter or linkedin_summary or f"I have {years_of_experience} years of relevant experience and would welcome the opportunity to discuss this role further.").strip()
             if not prev_answer or overwrite_previous_answers:
                 if 'summary' in label: answer = linkedin_summary
                 elif 'cover' in label: answer = cover_letter
@@ -738,19 +838,19 @@ def answer_questions(modal: WebElement, questions_list: set, work_location: str,
                             elif ai_provider.lower() == "gemini":
                                 answer = gemini_answer_question(aiClient, label_org, options=None, question_type="textarea", job_description=job_description, about_company=None, user_information_all=user_information_all)
                             else:
-                                randomly_answered_questions.add((label_org, "textarea"))
                                 answer = ""
                             if answer and isinstance(answer, str) and len(answer) > 0:
                                 print_lg(f'AI Answered received for question "{label_org}" \nhere is answer: "{answer}"')
                             else:
-                                randomly_answered_questions.add((label_org, "textarea"))
-                                answer = ""
+                                answer = fallback_answer
+                                randomly_answered_questions.add((label_org, "textarea (fallback answer used)"))
                         except Exception as e:
                             print_lg("Failed to get AI answer!", e)
-                            randomly_answered_questions.add((label_org, "textarea"))
-                            answer = ""
+                            answer = fallback_answer
+                            randomly_answered_questions.add((label_org, "textarea (fallback answer used)"))
                     else:
-                        randomly_answered_questions.add((label_org, "textarea"))
+                        answer = fallback_answer
+                        randomly_answered_questions.add((label_org, "textarea (fallback answer used)"))
             text_area.clear()
             text_area.send_keys(answer)
             if do_actions:
@@ -933,7 +1033,9 @@ def apply_to_jobs_for_location(search_terms: list[str]) -> None:
     if randomize_search_order:  shuffle(search_terms)
     
     for searchTerm in search_terms:
-        driver.get(f"https://www.linkedin.com/jobs/search/?keywords={searchTerm}")
+        # United Kingdom's geoId is used directly since the free-text `location` URL param and the location input field were unreliable across city switches.
+        geo_param = "&geoId=101165590" if search_location.strip().lower() == "united kingdom" else (f"&location={quote(search_location.strip())}" if search_location.strip() else "")
+        driver.get(f"https://www.linkedin.com/jobs/search/?keywords={quote(searchTerm)}{geo_param}")
         print_lg("\n________________________________________________________________________________________________________________________\n")
         print_lg(f'\n>>>> Now searching for "{searchTerm}" <<<<\n\n')
 
@@ -947,12 +1049,16 @@ def apply_to_jobs_for_location(search_terms: list[str]) -> None:
 
                 pagination_element, current_page = get_page_info()
 
-                # Find all job listings in current page
                 buffer(3)
-                job_listings = driver.find_elements(By.XPATH, "//li[@data-occludable-job-id]")  
+                listing_job_ids = [job.get_dom_attribute('data-occludable-job-id') for job in driver.find_elements(By.XPATH, "//li[@data-occludable-job-id]")]
 
             
-                for job in job_listings:
+                for listing_job_id in listing_job_ids:
+                    try:
+                        job = driver.find_element(By.XPATH, f"//li[@data-occludable-job-id='{listing_job_id}']")
+                    except (NoSuchElementException, StaleElementReferenceException):
+                        print_lg(f'Skipping refreshed job card {listing_job_id}.')
+                        continue
                     if keep_screen_awake: pyautogui.press('shiftright')
                     if current_count >= switch_number: break
                     
@@ -979,6 +1085,11 @@ def apply_to_jobs_for_location(search_terms: list[str]) -> None:
                     
                     if skip: 
                         log_application_status(title, company, "N/A", "N/A", "Skipped (Pre-check)")
+                        continue
+
+                    if not any(location_term.lower() in work_location.lower() for location_term in allowed_job_location_terms):
+                        print_lg(f'Skipping "{title} | {company}" because its location is outside the allowed location list: "{work_location}"')
+                        log_application_status(title, company, "N/A", "N/A", "Skipped (Disallowed location)")
                         continue
 
                     # ---------------- Classification & Filtering ----------------
@@ -1248,7 +1359,12 @@ def apply_to_jobs_for_location(search_terms: list[str]) -> None:
                     print_lg(f"\n>-> Didn't find Page {current_page+1}. Probably at the end page of results!\n")
                     break
 
-        except (NoSuchWindowException, WebDriverException) as e:
+        except StaleElementReferenceException as e:
+            print_lg("LinkedIn refreshed a job card; restarting the current results page.", e)
+            continue
+        except TimeoutException as e:
+            print_lg("Timed out waiting for job listings; probably no results for this search. Moving on.", e)
+        except (NoSuchWindowException, InvalidSessionIdException) as e:
             print_lg("Browser window closed or session is invalid. Ending application process.", e)
             raise e # Re-raise to be caught by main
         except Exception as e:
@@ -1267,9 +1383,15 @@ def apply_to_jobs(search_terms: list[str]) -> None:
     '''
     global search_location
     for target_location in search_locations:
+        if easy_applied_count + external_jobs_count >= MAX_APPLICATIONS_PER_DAY:
+            print_lg(f"Reached daily application cap of {MAX_APPLICATIONS_PER_DAY}. Stopping further locations.")
+            break
         search_location = target_location
         print_lg(f'\n===== Starting location: "{target_location}" =====\n')
         apply_to_jobs_for_location(search_terms)
+        if easy_applied_count + external_jobs_count >= MAX_APPLICATIONS_PER_DAY:
+            print_lg(f"Reached daily application cap of {MAX_APPLICATIONS_PER_DAY}. Stopping further locations.")
+            break
         if dailyEasyApplyLimitReached:
             break
 

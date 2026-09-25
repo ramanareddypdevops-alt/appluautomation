@@ -32,7 +32,7 @@ def get_applied_jobs():
             reader = csv.DictReader(file)
             for row in reader:
                 jobs.append({
-                    'Job_ID': row['Job ID'],
+                    'Job_ID': row['Job I5777'],
                     'Title': row['Title'],
                     'Company': row['Company'],
                     'HR_Name': row['HR Name'],
