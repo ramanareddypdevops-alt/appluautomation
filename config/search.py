@@ -19,11 +19,43 @@ version:    26.01.20.5.08
 
 # These Sentences are Searched in LinkedIn
 # Enter your search terms inside '[ ]' with quotes ' "searching title" ' for each search followed by comma ', ' Eg: ["Software Engineer", "Software Developer", "Selenium Developer"]
-search_terms = ["Azure DevOps Engineer", "Senior Azure DevOps Engineer", "Lead Azure DevOps Engineer", "Azure DevOps Manager", "DevOps Engineer", "Senior DevOps Engineer", "Lead DevOps Engineer", "DevOps Manager", "DevOps Team Lead", "DevOps Engineering Manager", "Cloud Architect", "Azure Cloud Architect", "DevOps Architect"]
+search_terms = [
+    "DevOps", "DevSecOps", "MLOps", "Platform Engineer", "Release Automation Engineer",
+    "Cloud Architect", "Infrastructure Manager", "Site Reliability Engineer",
+    "Cloud Engineer", "Infrastructure Engineer"
+]
 
 # Search location, this will be filled in "City, state, or zip code" search box. If left empty as "", tool will not fill it.
-search_location = "London, England, United Kingdom"  # Direct location for the current test.
-search_locations = ["London, England, United Kingdom"]
+# Search these locations using LinkedIn's location search for each configured entry.
+search_location = "United Kingdom"
+search_locations = [
+    "United Kingdom",
+    "Amsterdam, Netherlands",
+    "Dublin, Ireland",
+    "Luxembourg, Luxembourg",
+    "Germany",
+    "Switzerland",
+    "Canada",
+    "Australia",
+    "Singapore",
+    "United Arab Emirates",
+    "New Zealand",
+    "Sweden",
+    "United States"
+]
+allowed_job_location_terms = [
+    "United Kingdom", "UK", "England", "Scotland", "Wales", "Northern Ireland",
+    "Netherlands", "Amsterdam", "Dublin", "Ireland", "Luxembourg",
+    "Germany", "Berlin", "Munich", "Frankfurt",
+    "Switzerland", "Zurich", "Geneva",
+    "Canada", "Toronto", "Vancouver", "Montreal",
+    "Australia", "Sydney", "Melbourne",
+    "Singapore",
+    "United Arab Emirates", "UAE", "Dubai", "Abu Dhabi",
+    "New Zealand", "Auckland",
+    "Sweden", "Stockholm",
+    "United States", "USA", "U.S.", "Remote"
+]
 
 # After how many number of applications in current search should the bot switch to next search? 
 switch_number = 30                 # Only numbers greater than 0... Don't put in quotes
@@ -50,7 +82,7 @@ This is below format: QUESTION = VALID_ANSWER
 '''
 
 sort_by = ""                       # "Most recent", "Most relevant" or ("" to not select) 
-date_posted = "Past week"         # "Any time", "Past month", "Past week", "Past 24 hours" or ("" to not select)
+date_posted = "Any time"          # "Any time", "Past month", "Past week", "Past 24 hours" or ("" to not select)
 salary = ""                        # "$40,000+", "$60,000+", "$80,000+", "$100,000+", "$120,000+", "$140,000+", "$160,000+", "$180,000+", "$200,000+"
 
 easy_apply_only = True             # True or False, Note: True or False are case-sensitive
@@ -92,7 +124,17 @@ about_company_bad_words = ["Crossover"]       # (dynamic multiple search) or lea
 about_company_good_words = []      # (dynamic multiple search) or leave empty as []. Ex: ["Robert Half", "Dice"]
 
 # Avoid applying to these companies if they have these bad words in their 'Job Description' section...  (In development)
-bad_words = ["US Citizen", "USA Citizen", "US citizenship", "UK citizenship", "British citizenship", "nationality requirement", "No C2C", "No Corp2Corp", "security clearance", "SC clearance", "DV clearance", "Developed Vetting", "Counter Terrorist Check", "CTC clearance", "BPSS", "security cleared", "classified", "government security", "export control", "ITAR", "no visa sponsorship", "visa sponsorship is not available", "does not sponsor", "without sponsorship", "must have the right to work", ".NET", "Embedded Programming", "PHP", "Ruby", "CNC"]                     # (dynamic multiple search) or leave empty as []. Case Insensitive.
+bad_words = ["US Citizen", "USA Citizen", "US citizenship", "UK citizenship", "British citizenship", "nationality requirement", "No C2C", "No Corp2Corp", "security clearance", "SC clearance", "DV clearance", "Developed Vetting", "Counter Terrorist Check", "CTC clearance", "BPSS", "security cleared", "classified", "government security", "export control", "ITAR", "no visa sponsorship", "visa sponsorship is not available", "does not sponsor", "without sponsorship", "must have the right to work", "active security clearance required", "security clearance required", "national security clearance", ".NET", "Embedded Programming", "PHP", "Ruby", "CNC"]                     # (dynamic multiple search) or leave empty as []. Case Insensitive.
+
+# Require the job description to explicitly mention an available sponsorship route.
+# Left as False because most genuine UK sponsors never state this in the posting;
+# `bad_words` below already skips postings that explicitly refuse sponsorship.
+sponsorship_required = False
+sponsorship_terms = [
+    "visa sponsorship", "sponsor work visa", "sponsorship available",
+    "will sponsor", "eligible for sponsorship", "certificate of sponsorship",
+    "skilled worker visa"
+]
 
 # Do you have an active Security Clearance? (True for Yes and False for No)
 security_clearance = False         # True or False, Note: True or False are case-sensitive
